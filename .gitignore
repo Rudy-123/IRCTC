@@ -35,3 +35,7 @@ Thumbs.db
 # Prisma SQLite DB (if any)
 *.db
 *.db-journal
+
+# Ignore write markdown
+write.md
+DB_Selection.md
