@@ -1,0 +1,37 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# Environment variables (Confidential)
+.env
+.env.*
+!.env.example
+
+# Build and coverage directories
+dist/
+build/
+coverage/
+.nyc_output
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Cache
+.npm
+.eslintcache
+.cache
+
+# Optional REPL history
+.node_repl_history
+
+# Prisma SQLite DB (if any)
+*.db
+*.db-journal

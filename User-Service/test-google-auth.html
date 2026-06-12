@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IRCTC — Google Auth Tester</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0b0f1a;
+      --surface: #141926;
+      --surface-2: #1c2333;
+      --border: #2a3149;
+      --text: #e2e8f0;
+      --text-muted: #8892a8;
+      --accent: #6c63ff;
+      --accent-glow: rgba(108, 99, 255, 0.25);
+      --green: #22c55e;
+      --green-bg: rgba(34, 197, 94, 0.12);
+      --red: #ef4444;
+      --red-bg: rgba(239, 68, 68, 0.12);
+      --yellow: #eab308;
+      --yellow-bg: rgba(234, 179, 8, 0.12);
+      --radius: 12px;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      overflow-x: hidden;
+    }
+
+    /* Animated background gradient orbs */
+    body::before, body::after {
+      content: '';
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.3;
+      z-index: 0;
+      animation: float 8s ease-in-out infinite alternate;
+    }
+    body::before {
+      width: 400px; height: 400px;
+      background: var(--accent);
+      top: -100px; left: -100px;
+    }
+    body::after {
+      width: 350px; height: 350px;
+      background: #0ea5e9;
+      bottom: -80px; right: -80px;
+      animation-delay: 4s;
+    }
+    @keyframes float {
+      0% { transform: translate(0, 0) scale(1); }
+      100% { transform: translate(40px, 30px) scale(1.15); }
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 520px;
+    }
+
+    /* Header */
+    .header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    .header .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      padding: 6px 14px;
+      border-radius: 100px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    .badge .dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.8); }
+    }
+    .header h1 {
+      font-size: 28px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #e2e8f0, #6c63ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 8px;
+    }
+    .header p {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    /* Card */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px;
+      backdrop-filter: blur(12px);
+      transition: border-color 0.3s ease;
+    }
+    .card:hover {
+      border-color: rgba(108, 99, 255, 0.3);
+    }
+
+    /* Config section */
+    .config-section {
+      margin-bottom: 28px;
+    }
+    .config-section label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      letter-spacing: 0.3px;
+    }
+    .config-section input {
+      width: 100%;
+      padding: 10px 14px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .config-section input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+    .config-section input::placeholder {
+      color: #4a5568;
+    }
+    .input-hint {
+      font-size: 11px;
+      color: #4a5568;
+      margin-top: 6px;
+    }
+
+    /* Divider */
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 24px 0;
+    }
+
+    /* Google button area */
+    .google-btn-area {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+    .google-btn-area .label {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+    #g_id_onload, #google-btn {
+      display: flex;
+      justify-content: center;
+    }
+
+    /* Status bar */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-top: 24px;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.3s ease;
+    }
+    .status-bar.idle {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+    .status-bar.loading {
+      background: var(--yellow-bg);
+      border: 1px solid rgba(234, 179, 8, 0.25);
+      color: var(--yellow);
+    }
+    .status-bar.success {
+      background: var(--green-bg);
+      border: 1px solid rgba(34, 197, 94, 0.25);
+      color: var(--green);
+    }
+    .status-bar.error {
+      background: var(--red-bg);
+      border: 1px solid rgba(239, 68, 68, 0.25);
+      color: var(--red);
+    }
+    .status-icon {
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid rgba(234, 179, 8, 0.3);
+      border-top-color: var(--yellow);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Response block */
+    .response-block {
+      margin-top: 20px;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: all 0.4s ease;
+    }
+    .response-block.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .response-block .resp-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .response-block .resp-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .http-badge {
+      padding: 3px 10px;
+      border-radius: 100px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .http-badge.ok { background: var(--green-bg); color: var(--green); }
+    .http-badge.err { background: var(--red-bg); color: var(--red); }
+
+    .response-block pre {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      font-size: 12px;
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+      color: #93a3bf;
+      overflow-x: auto;
+      line-height: 1.6;
+      max-height: 320px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .response-block pre::-webkit-scrollbar { width: 6px; }
+    .response-block pre::-webkit-scrollbar-track { background: transparent; }
+    .response-block pre::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* Token preview */
+    .token-preview {
+      margin-top: 16px;
+      padding: 12px 16px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: all 0.4s ease;
+    }
+    .token-preview.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .token-preview .tp-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+    .token-preview code {
+      font-size: 11px;
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+      color: #4a5568;
+      word-break: break-all;
+      line-height: 1.5;
+      display: block;
+      max-height: 60px;
+      overflow: hidden;
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      margin-top: 24px;
+      font-size: 12px;
+      color: #3a4560;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <div class="header">
+      <div class="badge"><span class="dot"></span> Testing Tool</div>
+      <h1>Google Auth Tester</h1>
+      <p>Sign in with Google to test the <code style="color:var(--accent);font-size:13px;">/api/v1/auth/google</code> endpoint</p>
+    </div>
+
+    <div class="card">
+      <!-- Config -->
+      <div class="config-section">
+        <label>Backend URL</label>
+        <input type="text" id="backendUrl" value="http://localhost:4001" placeholder="http://localhost:4001" />
+        <div class="input-hint">Your User-Service base URL</div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Google Sign In -->
+      <div class="google-btn-area">
+        <span class="label">Click to authenticate with Google</span>
+        <div id="google-btn"></div>
+      </div>
+
+      <!-- Status -->
+      <div class="status-bar idle" id="statusBar">
+        <span class="status-icon">⏳</span>
+        <span id="statusText">Waiting for Google Sign-In…</span>
+      </div>
+
+      <!-- Token preview -->
+      <div class="token-preview" id="tokenPreview">
+        <div class="tp-title">📨 Google ID Token (truncated)</div>
+        <code id="tokenValue">—</code>
+      </div>
+
+      <!-- Response -->
+      <div class="response-block" id="responseBlock">
+        <div class="resp-header">
+          <span class="resp-title">Server Response</span>
+          <span class="http-badge" id="httpBadge">—</span>
+        </div>
+        <pre id="responseBody">—</pre>
+      </div>
+    </div>
+
+    <div class="footer">IRCTC User-Service &middot; Google Auth Test Page</div>
+  </div>
+
+  <!-- Google Identity Services -->
+  <script>
+    // ── Elements ──
+    const statusBar = document.getElementById('statusBar');
+    const tokenPreview = document.getElementById('tokenPreview');
+    const tokenValue = document.getElementById('tokenValue');
+    const responseBlock = document.getElementById('responseBlock');
+    const responseBody = document.getElementById('responseBody');
+    const httpBadge = document.getElementById('httpBadge');
+
+    const CLIENT_ID = '556071485714-0mifsi39sotebldlq3irl084nejkv481.apps.googleusercontent.com';
+
+    // ── Status helpers ──
+    function setStatus(type, icon, text) {
+      statusBar.className = 'status-bar ' + type;
+      statusBar.innerHTML =
+        (type === 'loading'
+          ? '<div class="spinner"></div>'
+          : '<span class="status-icon">' + icon + '</span>') +
+        '<span>' + text + '</span>';
+    }
+
+    // ── Google callback ──
+    function handleCredentialResponse(response) {
+      const idToken = response.credential;
+
+      // Show token preview
+      tokenValue.textContent = idToken.substring(0, 80) + '…';
+      tokenPreview.classList.add('visible');
+
+      // Update status
+      setStatus('loading', '', 'Sending token to backend…');
+
+      // Grab backend URL
+      const base = document.getElementById('backendUrl').value.replace(/\/+$/, '');
+      const url = base + '/api/v1/auth/google';
+
+      // Send to backend
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ idToken }),
+      })
+        .then(async (res) => {
+          const data = await res.json();
+          const ok = res.ok;
+
+          if (ok) {
+            setStatus('success', '✅', 'Authentication successful! (HTTP ' + res.status + ')');
+          } else {
+            setStatus('error', '❌', 'Request failed (HTTP ' + res.status + ')');
+          }
+
+          httpBadge.textContent = res.status + ' ' + res.statusText;
+          httpBadge.className = 'http-badge ' + (ok ? 'ok' : 'err');
+          responseBody.textContent = JSON.stringify(data, null, 2);
+          responseBlock.classList.add('visible');
+        })
+        .catch((err) => {
+          setStatus('error', '🔥', 'Network error — is the server running?');
+          httpBadge.textContent = 'ERR';
+          httpBadge.className = 'http-badge err';
+          responseBody.textContent = err.message + '\n\nMake sure:\n1. Backend is running on the URL above\n2. CORS allows this origin';
+          responseBlock.classList.add('visible');
+        });
+    }
+
+    // ── Load Google script and init ──
+    function initGoogle() {
+      try {
+        google.accounts.id.initialize({
+          client_id: CLIENT_ID,
+          callback: handleCredentialResponse,
+        });
+        google.accounts.id.renderButton(
+          document.getElementById('google-btn'),
+          { theme: 'filled_black', size: 'large', shape: 'pill', text: 'signin_with', width: 280 }
+        );
+        setStatus('idle', '✅', 'Google loaded — click the button above to sign in');
+      } catch (e) {
+        setStatus('error', '❌', 'Google init failed: ' + e.message);
+      }
+    }
+
+    // Load the script dynamically so we can handle onload/onerror
+    const gsiScript = document.createElement('script');
+    gsiScript.src = 'https://accounts.google.com/gsi/client';
+    gsiScript.onload = initGoogle;
+    gsiScript.onerror = function () {
+      setStatus('error', '❌', 'Failed to load Google script. Check your internet connection.');
+    };
+    document.head.appendChild(gsiScript);
+  </script>
+
+</body>
+</html>
