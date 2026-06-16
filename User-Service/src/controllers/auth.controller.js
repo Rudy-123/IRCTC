@@ -4,8 +4,8 @@
 const { BadRequestError, UnauthorizedError } = require("../utils/error");
 const asyncHandler = require("../utils/asyncHandler");
 const { config } = require("../config");
+const { getDeviceFingerprint } = require("../utils/device");
 const authService = require("../services/auth.service");
-const { getDeviceFingerprint } = require("../middlewares/auth.middleware");
 
 exports.sendOTP = asyncHandler(async (req, res) => {
   const { firstName, lastName, email, password, confirmPassword } = req.body;

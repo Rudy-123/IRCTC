@@ -1,14 +1,18 @@
 const express = require("express");
-const { isAuthenticated } = require("../middlewares/auth.middleware");
+const { getUserContext } = require("../middlewares/getUserContext.middleware");
+const { internalAuth } = require("../middlewares/internalAuth.middleware");
 const {
   getProfile,
   updateProfile,
-  deletProfile,
+  deleteProfile,
+  getUserInternal,
 } = require("../controllers/user.controller");
-const { requireAuth } = require("../middlewares/auth.middleware");
 
 const router = express.Router();
-router.get("/profile", requireAuth, getProfile);
-router.put("/profile", requireAuth, updateProfile);
-router.get("/profile", requireAuth, deleteProfile);
+router.get("/profile", getUserContext, getProfile);
+router.put("/profile", getUserContext, updateProfile);
+router.delete("/profile", getUserContext, deleteProfile);
+
+router.get("/internal/:userId", internalAuth, getUserInternal);
+
 module.exports = router;
