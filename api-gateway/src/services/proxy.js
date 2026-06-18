@@ -68,6 +68,9 @@ const circuitBreakers = {
   userService: new CircuitBreaker("user-service"),
   searchService: new CircuitBreaker("search-service"),
   bookingService: new CircuitBreaker("booking-service"),
+  adminService: new CircuitBreaker("admin-service"),
+  inventoryService: new CircuitBreaker("inventory-service"),
+  paymentService: new CircuitBreaker("payment-service"),
 };
 
 /**
