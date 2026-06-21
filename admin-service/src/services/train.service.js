@@ -43,4 +43,96 @@ const createTrain = async (data) => {
   });
   return train;
 };
-module.exports = { createTrain };
+
+const createRoute = async (data) => {
+  const { trainId, stations } = data;
+  const train = await prisma.train.findUnique({
+    where: { id: trainId },
+  });
+  if (!train) {
+    throw new NotFoundError("Train Not Found");
+  }
+  ///every train wouold be having a single route so check that already a route does not exist
+  const existingRoute = await prisma.route.findUnique({
+    where: { trainId },
+  });
+  if (existingRoute) {
+    throw new ConflictError("Route already exists for this train");
+  }
+
+  //collect the stationIds, that will have the record of stations in the route
+  const stationIds = stations.map((station) => station.stationId);
+  const existingStations = await prisma.station.findMany({
+    where: { id: { in: stationIds } },
+  });
+  if (existingStations.length !== stationIds.length) {
+    throw new BadRequestError("One or more station IDs are invalid");
+  }
+  const sorted = [...stations].sort(
+    (a, b) => a.sequenceNumber - b.sequenceNumber,
+  );
+  for (let i = 0; i < sorted.length; i++) {
+    if (sorted[i].sequenceNumber !== i + 1) {
+      throw new BadRequestError("Sequence numbers must be continous");
+    }
+  }
+  const route = await prisma.route.create({
+    data: {
+      trainId,
+      routeStations: {
+        create: stations.map((s) => ({
+          stationId: s.stationId,
+          sequenceNumber: s.sequenceNumber,
+          arrivalTime: s.arrivalTime || null,
+          departureTime: s.departureTime || null,
+          distanceFromOrigin: s.distanceFromOrigin || 0,
+        })),
+      },
+    },
+    include: {
+      routeStations: {
+        include: { station: true },
+        orderBy: { sequenceNumber: "asc" },
+      },
+    },
+  });
+  await adminProducer.publishRouteCreated(route);
+  return route;
+};
+
+const getAllTrains = async () => {
+  return prisma.train.findMany({
+    include: {
+      seats: { orderBy: { seatNumber: "asc" } },
+      route: {
+        include: {
+          routeStations: {
+            include: { station: true },
+            orderBy: { sequenceNumber: "asc" },
+          },
+        },
+      },
+    },
+    orderBy: { trainNumber: "asc" },
+  });
+};
+
+const getTrainById = async (id) => {
+  const train = await prisma.train.findUnique({
+    where: { id },
+    include: {
+      seats: { orderBy: { seatNumber: "asc" } },
+      route: {
+        include: {
+          routeStations: {
+            include: { station: true },
+            orderBy: { sequenceNumber: "asc" },
+          },
+        },
+      },
+    },
+  });
+  if (!train) throw new NotFoundError("Train not found");
+  return train;
+};
+module.exports = { createTrain, createRoute, getTrainById, getAllTrains };
