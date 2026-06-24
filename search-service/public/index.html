@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <title>IRCTC Train Search</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-gray-50 min-h-screen font-sans">
+    <!-- Navbar -->
+    <header class="bg-[#1e3a8a] text-white py-6 text-center shadow-md">
+      <h1 class="text-3xl font-bold tracking-wide">IRCTC Train Search</h1>
+      <p class="text-sm mt-2 text-blue-200">
+        Find trains between stations with fuzzy search & autocomplete
+      </p>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-4xl mx-auto mt-8 px-4">
+      <!-- Info Banner -->
+      <div class="bg-orange-50 border-l-4 border-orange-400 p-4 mb-8 shadow-sm rounded-r-md">
+        <p class="text-orange-800 text-sm">
+          <span class="font-semibold">Fuzzy search enabled</span> — try typing
+          "dehli" instead of "Delhi" or "mumbi" instead of "Mumbai". The search
+          engine will still find the right station!
+        </p>
+      </div>
+
+      <!-- Search Form -->
+      <div class="bg-white p-8 rounded-lg shadow-lg">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          <!-- From Station -->
+          <div class="relative">
+            <label class="block text-xs font-bold text-gray-500 mb-2 uppercase tracking-wide">From Station</label>
+            <input
+              type="text"
+              id="from"
+              placeholder="Type station name or code..."
+              autocomplete="off"
+              class="w-full px-4 py-3 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition-all"
+            />
+            <!-- Autocomplete dropdown -->
+            <div id="from-suggestions" class="absolute z-10 w-full bg-white border border-gray-200 rounded-md shadow-lg hidden mt-1 max-h-48 overflow-y-auto"></div>
+          </div>
+
+          <!-- To Station -->
+          <div class="relative">
+            <label class="block text-xs font-bold text-gray-500 mb-2 uppercase tracking-wide">To Station</label>
+            <input
+              type="text"
+              id="to"
+              placeholder="Type station name or code..."
+              autocomplete="off"
+              class="w-full px-4 py-3 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition-all"
+            />
+            <!-- Autocomplete dropdown -->
+            <div id="to-suggestions" class="absolute z-10 w-full bg-white border border-gray-200 rounded-md shadow-lg hidden mt-1 max-h-48 overflow-y-auto"></div>
+          </div>
+        </div>
+
+        <!-- Date -->
+        <div class="mb-8">
+          <label class="block text-xs font-bold text-gray-500 mb-2 uppercase tracking-wide">Travel Date (Optional)</label>
+          <input type="date" id="date" class="w-full px-4 py-3 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent text-gray-700" />
+        </div>
+
+        <!-- Submit Button -->
+        <button id="search-btn" class="w-full bg-[#f97316] hover:bg-orange-600 text-white font-bold py-3 px-4 rounded-md shadow-md transition-colors duration-200">
+          Search Trains
+        </button>
+      </div>
+
+      <!-- Results Section -->
+      <div id="results" class="mt-8 hidden">
+        <h2 class="text-xl font-bold text-gray-800 mb-4">Search Results</h2>
+        <div id="train-list" class="space-y-4"></div>
+      </div>
+    </main>
+
+    <!-- Logic for Autocomplete & Search -->
+    <script>
+      // API Gateway Base URL
+      const GATEWAY_URL = 'http://localhost:4000/api';
+
+      // Generic Autocomplete Handler
+      function setupAutocomplete(inputId, dropdownId) {
+        const input = document.getElementById(inputId);
+        const dropdown = document.getElementById(dropdownId);
+        let currentFocus = -1;
+
+        input.addEventListener("input", async (e) => {
+          const query = e.target.value;
+          currentFocus = -1;
+          if (query.length < 2) {
+            dropdown.classList.add("hidden");
+            return;
+          }
+          try {
+            const res = await fetch(`${GATEWAY_URL}/search/autocomplete?q=${query}`);
+            const data = await res.json();
+            if (data.success && data.data.length > 0) {
+              dropdown.innerHTML = data.data
+                .map((station) => 
+                  `<div class="suggestion-item px-4 py-2 hover:bg-orange-50 cursor-pointer text-sm text-gray-700 border-b last:border-b-0" 
+                        data-value="${station.name} (${station.code})">
+                      <span class="font-bold">${station.code}</span> - ${station.name}
+                  </div>`
+                ).join("");
+              dropdown.classList.remove("hidden");
+
+              // Add reliable click listeners
+              const items = dropdown.querySelectorAll('.suggestion-item');
+              items.forEach(item => {
+                item.addEventListener('click', function(e) {
+                  input.value = this.getAttribute('data-value');
+                  dropdown.classList.add("hidden");
+                });
+              });
+            } else {
+              dropdown.classList.add("hidden");
+            }
+          } catch (error) {
+            console.error("Error fetching suggestions", error);
+          }
+        });
+
+        // Keyboard Navigation (Down, Up, Enter)
+        input.addEventListener("keydown", function(e) {
+          const items = dropdown.querySelectorAll('.suggestion-item');
+          if (items.length === 0 || dropdown.classList.contains('hidden')) return;
+
+          if (e.key === "ArrowDown") {
+            currentFocus++;
+            addActive(items);
+          } else if (e.key === "ArrowUp") {
+            currentFocus--;
+            addActive(items);
+          } else if (e.key === "Enter") {
+            e.preventDefault();
+            if (currentFocus > -1) {
+              items[currentFocus].click();
+            }
+          }
+        });
+
+        function addActive(items) {
+          if (!items) return false;
+          removeActive(items);
+          if (currentFocus >= items.length) currentFocus = 0;
+          if (currentFocus < 0) currentFocus = (items.length - 1);
+          items[currentFocus].classList.add("bg-orange-100");
+          items[currentFocus].scrollIntoView({ block: "nearest" });
+        }
+
+        function removeActive(items) {
+          for (let i = 0; i < items.length; i++) {
+            items[i].classList.remove("bg-orange-100");
+          }
+        }
+      }
+
+      setupAutocomplete("from", "from-suggestions");
+      setupAutocomplete("to", "to-suggestions");
+
+      // Hide dropdowns when clicking outside
+      document.addEventListener("click", (e) => {
+        if (!e.target.closest("#from") && !e.target.closest("#from-suggestions")) {
+          document.getElementById("from-suggestions").classList.add("hidden");
+        }
+        if (!e.target.closest("#to") && !e.target.closest("#to-suggestions")) {
+          document.getElementById("to-suggestions").classList.add("hidden");
+        }
+      });
+
+      // Search Function
+      async function searchTrains() {
+        const fromInput = document.getElementById("from").value;
+        const toInput = document.getElementById("to").value;
+        const date = document.getElementById("date").value;
+
+        if (!fromInput || !toInput) {
+          alert("Please enter both From and To stations");
+          return;
+        }
+
+        // Extract code from "Station Name (CODE)" or fallback to first word
+        const extractCode = (str) => {
+          const match = str.match(/\(([^)]+)\)/);
+          return match ? match[1] : str.split(" ")[0];
+        };
+
+        const from = extractCode(fromInput);
+        const to = extractCode(toInput);
+
+        const resultsDiv = document.getElementById("results");
+        const listDiv = document.getElementById("train-list");
+        resultsDiv.classList.remove("hidden");
+        listDiv.innerHTML = `<div class="text-center text-gray-500 p-4">Loading...</div>`;
+
+        try {
+          const url = `${GATEWAY_URL}/search/trains?from=${from}&to=${to}${date ? "&date=" + date : ""}`;
+          console.log("Fetching:", url);
+          const res = await fetch(url);
+          const data = await res.json();
+          console.log("Response:", JSON.stringify(data));
+
+          if (!data.success) {
+            listDiv.innerHTML = `<div class="bg-red-50 p-4 rounded-lg text-center text-red-600 font-bold border border-red-200">Error: ${data.message || 'Unknown error'}</div>`;
+            return;
+          }
+
+          // Handle case where station was not found by backend
+          if (data.data.message) {
+            listDiv.innerHTML = `<div class="bg-red-50 p-4 rounded-lg text-center text-red-600 font-bold border border-red-200">${data.data.message}</div>`;
+            return;
+          }
+
+          // Hide the default "Search Results" title to match tutorial design
+          const titleElement = document.querySelector("#results h2");
+          if(titleElement) titleElement.classList.add("hidden");
+          
+          let html = '';
+          
+          // Resolved Banner (Green)
+          html += `<div class="bg-[#e8f5e9] text-[#2e7d32] text-xs p-3 rounded mb-4 font-medium tracking-wide">
+                      <span class="font-bold">Resolved:</span> ${data.data.from.resolved} (${data.data.from.code}) &nbsp;|&nbsp; <span class="font-bold">${data.data.to.resolved}</span> (${data.data.to.code})
+                   </div>`;
+                   
+          // Count Pill (Blue)
+          html += `<div class="mb-4">
+                      <span class="bg-[#5c85d6] text-white text-xs font-semibold px-2 py-1 rounded">${data.data.count} train(s) found</span>
+                   </div>`;
+
+          if (data.data.trains.length > 0) {
+            html += data.data.trains.map(train => {
+              // Seat Pills
+              let seatsHtml = '';
+              if (train.seatSummary) {
+                seatsHtml += `<span class="bg-gray-200 text-gray-600 text-[10px] font-bold px-2 py-1 rounded uppercase">Total Seats: ${train.seatSummary.total || 0}</span>`;
+                const types = ['LOWER', 'MIDDLE', 'UPPER', 'SIDE_LOWER', 'SIDE_UPPER'];
+                types.forEach(type => {
+                  if (train.seatSummary[type]) {
+                    const displayName = type.replace('_', ' ');
+                    seatsHtml += `<span class="bg-gray-100 text-gray-500 text-[10px] font-bold px-2 py-1 rounded uppercase">${displayName}: ${train.seatSummary[type]}</span>`;
+                  }
+                });
+              }
+
+              return `
+              <div class="bg-white p-6 rounded-xl shadow-sm border border-l-4 border-l-[#1e3a8a] mb-4 relative">
+                  <!-- Train Name & Number -->
+                  <div class="flex justify-between items-start mb-6">
+                      <h3 class="text-md font-bold text-[#1e3a8a] tracking-wide">${train.trainName}</h3>
+                      <span class="bg-gray-100 text-gray-400 text-xs font-bold px-3 py-1 rounded-full">#${train.trainNumber}</span>
+                  </div>
+                  
+                  <!-- Journey Details -->
+                  <div class="flex justify-between items-center mb-6">
+                      <!-- From -->
+                      <div class="text-left w-1/3">
+                          <p class="text-xs font-bold text-gray-700">${train.from.name}</p>
+                          <p class="text-[10px] text-gray-400 uppercase tracking-widest mt-0.5">${train.from.code}</p>
+                          <p class="text-lg font-bold text-gray-900 mt-2">${train.from.departure || '--:--'}</p>
+                      </div>
+                      
+                      <!-- Divider Line -->
+                      <div class="w-1/3 flex items-center justify-center">
+                          <div class="h-px bg-gray-200 w-full mx-6"></div>
+                      </div>
+                      
+                      <!-- To -->
+                      <div class="text-right w-1/3">
+                          <p class="text-xs font-bold text-gray-700">${train.to.name}</p>
+                          <p class="text-[10px] text-gray-400 uppercase tracking-widest mt-0.5">${train.to.code}</p>
+                          <p class="text-lg font-bold text-gray-900 mt-2">${train.to.arrival || '--:--'}</p>
+                      </div>
+                  </div>
+                  
+                  <!-- Seats Summary -->
+                  <div class="flex flex-wrap gap-2 mt-2">
+                      ${seatsHtml}
+                  </div>
+              </div>`;
+            }).join("");
+          } else {
+            html += `<div class="bg-white p-6 rounded-lg shadow text-center text-gray-500">No trains found for this route.</div>`;
+          }
+          listDiv.innerHTML = html;
+        } catch (error) {
+          console.error("Error searching trains", error);
+          const resultsDiv2 = document.getElementById("results");
+          const listDiv2 = document.getElementById("train-list");
+          resultsDiv2.classList.remove("hidden");
+          listDiv2.innerHTML = `<div class="bg-red-50 p-4 rounded-lg text-center text-red-600 font-bold border border-red-200">JS Error: ${error.message}</div>`;
+        }
+      }
+
+      // Attach search button click via JS (not inline onclick) to avoid CSP block
+      document.getElementById("search-btn").addEventListener("click", searchTrains);
+    </script>
+  </body>
+</html>
