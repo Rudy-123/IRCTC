@@ -1,4 +1,3 @@
-
 <p align="center">
   <img src="https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" />
   <img src="https://img.shields.io/badge/Express-000000?style=for-the-badge&logo=express&logoColor=white" />
@@ -28,19 +27,31 @@ Equipped with a highly optimized **Node.js/Express Backend Grid**, a **PostgreSQ
 
 ## ⚙️ Key Optimizations
 
-- **Distributed Seat Locking via Redis Lua Scripts:** Developed a high-performance concurrency control mechanism using Redis Lua scripts. Acquires atomic, all-or-nothing locks across multiple requested seats sorted lexicographically to prevent deadlocks. Guarantees that two users cannot simultaneously reserve the same seat, with a fallback cleanup mechanism to instantly release locks if any single seat fails.
-- **Saga Orchestration & Optimistic Concurrency:** Implemented the Saga Pattern in the Booking Coordinator Service to manage distributed transactions across the Inventory and Payment services. Updates to critical state use Compare-And-Swap (CAS) with version fields (`version = version + 1`), ensuring optimistic concurrency control without the overhead of heavy pessimistic DB locks.
-- **Segment-Based Booking with Overlap Detection:** Built a complex inventory management system using PostgreSQL `FOR UPDATE NOWAIT` pessimistic locking. Uses `SeatSegmentLock` rows to track seat availability across specific route segments (e.g., A→C and C→E on an A→E route), seamlessly calculating overlaps (`newFrom < existing.to AND newTo > existing.from`) to maximize seat utilization.
-- **Fault-Tolerant API Gateway with Circuit Breaking:** Engineered a custom Axios-based API Gateway Proxy wrapped in a 3-state Circuit Breaker (CLOSED → OPEN → HALF_OPEN). Instantly detects downstream service degradation (e.g., User Service timeout), aborts requests to prevent cascading failures, and implements sliding window rate limiting via Redis Sorted Sets (ZSET) to protect against DDoS attacks.
-- **Two-Token Authentication & Device Fingerprinting:** Fortified security with an Access + Refresh Token rotation strategy using `httpOnly` cookies. Refresh tokens are paired with device fingerprinting and rotated silently on expiry, immediately neutralizing stolen tokens and preventing session hijacking.
+- **Distributed Seat Locking (Redis):** Employs Redis Lua scripts for atomic, all-or-nothing lock acquisition across multiple requested seats (sorted lexicographically). Prevents race conditions and ensures two users cannot simultaneously reserve the same seat.
+
+  <br/>
+
+- **Saga Orchestration & Optimistic Concurrency:** Uses the Saga Pattern in the Booking Service to orchestrate distributed transactions. Leverages Compare-And-Swap (CAS) with version fields for optimistic concurrency control, avoiding heavy DB locks.
+
+  <br/>
+
+- **Segment-Based Booking & Overlap Detection:** Uses PostgreSQL `FOR UPDATE NOWAIT` pessimistic locking with `SeatSegmentLock` rows to track and maximize availability across specific route segments, calculating overlaps dynamically.
+
+  <br/>
+
+- **API Gateway Circuit Breaker & Rate Limiting:** Engineered an Axios-based API Gateway Proxy with a 3-state Circuit Breaker to prevent cascading failures. Defends against traffic spikes using a Sliding Window rate limiter backed by Redis Sorted Sets (ZSET).
+
+  <br/>
+
+- **Two-Token Authentication:** Secures user sessions using an Access + Refresh Token rotation strategy with `httpOnly` cookies and device fingerprinting. Tokens rotate silently on expiry, immediately neutralizing stolen credentials.
 
 ---
 
 ## 🏗️ System Architecture
 
-The application utilizes a distributed microservices architecture, seamlessly integrating a robust API Gateway with isolated backend domain services (User, Booking, Inventory, Payment, Search) communicating synchronously via HTTP and asynchronously via Apache Kafka.
+The application utilizes a distributed microservices architecture, seamlessly integrating a robust API Gateway with isolated backend domain services communicating synchronously via HTTP and asynchronously via Apache Kafka. Each service owns its own database for true decoupled scalability.
 
-### High-Level Architecture
+### High-Level Architecture (Full System Topology)
 
 ```mermaid
 graph TD
@@ -48,40 +59,77 @@ graph TD
     classDef gateway fill:#fff8e1,stroke:#e65100,stroke-width:2px,color:#000;
     classDef service fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px,color:#000;
     classDef broker fill:#f3e5f5,stroke:#4a148c,stroke-width:2px,color:#000;
+    classDef database fill:#ffebee,stroke:#b71c1c,stroke-width:2px,color:#000;
+    classDef external fill:#eceff1,stroke:#455a64,stroke-width:2px,color:#000;
 
-    User((User / Client)):::frontend
-    Frontend[React SPA]:::frontend
-    
-    Gateway[API Gateway<br/><i>Circuit Breaker, Rate Limiter</i>]:::gateway
+    User((Client App)):::frontend
+    Frontend[React SPA + Zustand]:::frontend
+
+    Gateway[API Gateway<br/><i>Circuit Breaker, Rate Limiter, Auth</i>]:::gateway
 
     User --> Frontend
-    Frontend <--> Gateway
+    Frontend <-->|HTTP Requests| Gateway
 
-    subgraph Microservices
-        UserService[User Service<br/><i>Auth, JWT, OTP</i>]:::service
-        SearchService[Search Service<br/><i>Elasticsearch</i>]:::service
-        BookingService[Booking Service<br/><i>Saga Orchestrator</i>]:::service
-        InventoryService[Inventory Service<br/><i>PostgreSQL, Locking</i>]:::service
-        PaymentService[Payment Service<br/><i>Razorpay Webhooks</i>]:::service
-        NotificationService[Notification Service<br/><i>SendGrid</i>]:::service
+    subgraph Domain_Services ["Microservices Grid (Node.js/Express)"]
+        UserService[User Service<br/><i>Port 4001</i>]:::service
+        AdminService[Admin Service<br/><i>Port 4002</i>]:::service
+        SearchService[Search Service<br/><i>Port 4003</i>]:::service
+        InventoryService[Inventory Service<br/><i>Port 4004</i>]:::service
+        BookingService[Booking Service<br/><i>Port 4005</i>]:::service
+        PaymentService[Payment Service<br/><i>Port 4006</i>]:::service
+        NotificationService[Notification Service<br/><i>Port 4007</i>]:::service
     end
 
     Gateway --> UserService
+    Gateway --> AdminService
     Gateway --> SearchService
     Gateway --> BookingService
-    
-    BookingService -->|HTTP Sync| InventoryService
-    BookingService -->|HTTP Sync| PaymentService
 
-    Kafka[Apache Kafka<br/><i>Event Bus</i>]:::broker
+    %% Synchronous Inter-Service calls (Saga)
+    BookingService -->|1. Hold Seats (HTTP)| InventoryService
+    BookingService -->|2. Create Order (HTTP)| PaymentService
+    BookingService -->|3. Confirm Seats (HTTP)| InventoryService
 
+    subgraph Data_Layer ["Data Persistence & Search"]
+        DB_User[(User DB)]:::database
+        DB_Admin[(Admin DB)]:::database
+        DB_Booking[(Booking DB)]:::database
+        DB_Inventory[(Inventory DB)]:::database
+        DB_Payment[(Payment DB)]:::database
+        ES[(Elasticsearch)]:::database
+        Redis[(Redis Cache & Locks)]:::database
+    end
+
+    UserService --- DB_User
+    AdminService --- DB_Admin
+    BookingService --- DB_Booking
+    InventoryService --- DB_Inventory
+    PaymentService --- DB_Payment
+    SearchService --- ES
+    Gateway -.- Redis
+    BookingService -.- Redis
+
+    subgraph Event_Bus ["Asynchronous Event Streaming"]
+        Kafka[Apache Kafka + Zookeeper]:::broker
+    end
+
+    AdminService -.->|schedule.created| Kafka
     PaymentService -.->|payment.success| Kafka
     InventoryService -.->|seat.availability| Kafka
     BookingService -.->|booking.confirmed| Kafka
-    
+
     Kafka -.-> NotificationService
     Kafka -.-> SearchService
     Kafka -.-> BookingService
+    Kafka -.-> InventoryService
+
+    subgraph External_Providers ["Third-Party APIs"]
+        Razorpay((Razorpay Gateway)):::external
+        SendGrid((SendGrid Mail)):::external
+    end
+
+    PaymentService <-->|Webhooks & Verification| Razorpay
+    NotificationService -->|Email Alerts| SendGrid
 ```
 
 ---
@@ -103,11 +151,13 @@ The lifecycle of a booking operation follows a strict, highly consistent path:
 ## 💻 Tech Stack
 
 ### Frontend
+
 - **Framework:** React + Vite
 - **State Management:** Zustand
 - **Styling:** TailwindCSS
 
 ### Backend
+
 - **Runtime:** Node.js, Express
 - **Architecture:** Microservices, Saga Orchestrator, API Gateway
 - **Database:** PostgreSQL (per-service isolation), Prisma ORM
@@ -116,6 +166,7 @@ The lifecycle of a booking operation follows a strict, highly consistent path:
 - **Search Engine:** Elasticsearch 8, Kibana
 
 ### Infrastructure
+
 - **Containerization:** Docker & Docker Compose
 - **Payment Gateway:** Razorpay
 - **Notifications:** SendGrid
