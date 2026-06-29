@@ -28,21 +28,9 @@ Equipped with a highly optimized **Node.js/Express Backend Grid**, a **PostgreSQ
 ## ⚙️ Key Optimizations
 
 - **Distributed Seat Locking (Redis):** Employs Redis Lua scripts for atomic, all-or-nothing lock acquisition across multiple requested seats (sorted lexicographically). Prevents race conditions and ensures two users cannot simultaneously reserve the same seat.
-
-  <br/>
-
 - **Saga Orchestration & Optimistic Concurrency:** Uses the Saga Pattern in the Booking Service to orchestrate distributed transactions. Leverages Compare-And-Swap (CAS) with version fields for optimistic concurrency control, avoiding heavy DB locks.
-
-  <br/>
-
 - **Segment-Based Booking & Overlap Detection:** Uses PostgreSQL `FOR UPDATE NOWAIT` pessimistic locking with `SeatSegmentLock` rows to track and maximize availability across specific route segments, calculating overlaps dynamically.
-
-  <br/>
-
 - **API Gateway Circuit Breaker & Rate Limiting:** Engineered an Axios-based API Gateway Proxy with a 3-state Circuit Breaker to prevent cascading failures. Defends against traffic spikes using a Sliding Window rate limiter backed by Redis Sorted Sets (ZSET).
-
-  <br/>
-
 - **Two-Token Authentication:** Secures user sessions using an Access + Refresh Token rotation strategy with `httpOnly` cookies and device fingerprinting. Tokens rotate silently on expiry, immediately neutralizing stolen credentials.
 
 ---
@@ -68,7 +56,7 @@ graph TD
     Gateway[API Gateway<br/><i>Circuit Breaker, Rate Limiter, Auth</i>]:::gateway
 
     User --> Frontend
-    Frontend <-->|HTTP Requests| Gateway
+    Frontend <--> Gateway
 
     subgraph Domain_Services ["Microservices Grid (Node.js/Express)"]
         UserService[User Service<br/><i>Port 4001</i>]:::service
@@ -86,9 +74,9 @@ graph TD
     Gateway --> BookingService
 
     %% Synchronous Inter-Service calls (Saga)
-    BookingService -->|1. Hold Seats (HTTP)| InventoryService
-    BookingService -->|2. Create Order (HTTP)| PaymentService
-    BookingService -->|3. Confirm Seats (HTTP)| InventoryService
+    BookingService -->|1. Hold Seats - HTTP| InventoryService
+    BookingService -->|2. Create Order - HTTP| PaymentService
+    BookingService -->|3. Confirm Seats - HTTP| InventoryService
 
     subgraph Data_Layer ["Data Persistence & Search"]
         DB_User[(User DB)]:::database
@@ -128,7 +116,7 @@ graph TD
         SendGrid((SendGrid Mail)):::external
     end
 
-    PaymentService <-->|Webhooks & Verification| Razorpay
+    PaymentService <--> Razorpay
     NotificationService -->|Email Alerts| SendGrid
 ```
 
@@ -232,3 +220,5 @@ Contributions are welcome.
 
 This project is licensed under the **MIT License**.
 See `LICENSE` file for more details.
+
+
