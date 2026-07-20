@@ -78,7 +78,7 @@ To keep the architecture readable, the system is shown in two views:
   }
 }}%%
 
-flowchart LR
+flowchart TB
     classDef client fill:#E3F2FD,stroke:#1565C0,stroke-width:2px,color:#000;
     classDef gateway fill:#FFF3E0,stroke:#E65100,stroke-width:2px,color:#000;
     classDef service fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px,color:#000;
@@ -88,13 +88,11 @@ flowchart LR
     User((User)):::client
     Frontend[React Web Application<br/>Search • Seats • Booking • Payment]:::client
     Gateway[API Gateway<br/>Authentication • Routing • Rate Limiting]:::gateway
-
     Search[Search Service<br/>Find trains and schedules]:::service
     Booking[Booking Service<br/>Create and manage booking]:::service
     Inventory[Inventory Service<br/>Hold, confirm, or release seats]:::service
     Payment[Payment Service<br/>Create and verify payment]:::service
     Razorpay((Razorpay)):::external
-
     Kafka[Kafka Events]:::event
     Notification[Notification Service]:::service
     SendGrid((SendGrid)):::external
@@ -103,17 +101,22 @@ flowchart LR
     Frontend --> Gateway
 
     Gateway -->|Search request| Search
+    Search -->|Selected train and journey| Booking
+
     Gateway -->|Booking request| Booking
-
     Booking -->|1. Hold seats| Inventory
+    Inventory -->|Seat hold result| Booking
+
     Booking -->|2. Create payment order| Payment
-    Payment <--> Razorpay
+    Payment --> Razorpay
+    Razorpay -->|Payment result| Payment
 
-    Payment -.->|3. Payment result| Kafka
-    Kafka -.->|4. Update booking| Booking
+    Payment -.->|3. Publish payment event| Kafka
+    Kafka -.->|4. Update booking status| Booking
+
     Booking -->|5. Confirm or release seats| Inventory
+    Booking -.->|6. Publish booking event| Kafka
 
-    Booking -.->|6. Booking event| Kafka
     Kafka -.-> Notification
     Notification --> SendGrid
 ```
