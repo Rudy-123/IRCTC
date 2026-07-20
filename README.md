@@ -9,37 +9,58 @@
   <img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white" />
 </p>
 
-# 🚆 IRCTC Railway Booking System
+# 🚆 BookMyTrain — Railway Reservation System
 
-### Scalable, Fault-Tolerant Microservices Platform for High-Concurrency Ticket Booking
+### Microservices-Based Booking Platform with Distributed Transaction and Seat-Coordination Workflows
+
+> **Disclaimer:** This is an educational portfolio project inspired by railway reservation workflows. It is not affiliated with IRCTC or Indian Railways.
 
 ---
 
 ## 📖 Project Overview
 
-**IRCTC Railway Booking System** is a robust, high-availability ticket reservation platform designed to provide low-latency operations and handle massive concurrent bookings. Built to handle scale reminiscent of India's official rail booking system, it features a decentralized microservices architecture for fault tolerance, seamless data synchronization, and horizontal scalability.
+**BookMyTrain** is a full-stack railway reservation project built to explore backend and distributed-systems concepts through a realistic ticket-booking workflow.
 
-Instead of relying on a monolithic bottleneck, this platform utilizes **Saga Orchestration**, **distributed locking**, and an **event-driven Kafka backbone** to distribute workloads evenly. It empowers users to achieve sub-second booking confirmations, prevents race conditions during seat selection, and scales horizontally across completely isolated service boundaries.
+The application is divided into domain-focused Node.js and Express services for authentication, train administration, search, inventory, booking, payment, and notifications. An API Gateway provides a common entry point, while services communicate through HTTP for request-response operations and Apache Kafka for asynchronous events.
 
-Equipped with a highly optimized **Node.js/Express Backend Grid**, a **PostgreSQL Database per Service**, and an intuitive **React Web Interface**, it provides both performance and effective transaction management.
+The booking flow includes idempotent request handling, temporary seat holds, Saga-based orchestration, compensating actions, payment processing, booking-state transitions, and segment-aware seat availability. Redis is used for caching, rate limiting, and temporary seat coordination; PostgreSQL and Prisma manage transactional data; Elasticsearch supports train search; and React provides the user interface.
+
+This repository demonstrates the implementation of these patterns in a local development environment. It does not claim official IRCTC-level scale, production availability, or unverified latency and throughput figures.
 
 ---
 
-## ⚙️ Key Optimizations
+## ✨ Core Features
 
-- **Distributed Seat Locking (Redis):** Employs Redis Lua scripts for atomic, all-or-nothing lock acquisition across multiple requested seats (sorted lexicographically). Prevents race conditions and ensures two users cannot simultaneously reserve the same seat.
-- **Saga Orchestration & Optimistic Concurrency:** Uses the Saga Pattern in the Booking Service to orchestrate distributed transactions. Leverages Compare-And-Swap (CAS) with version fields for optimistic concurrency control, avoiding heavy DB locks.
-- **Segment-Based Booking & Overlap Detection:** Uses PostgreSQL `FOR UPDATE NOWAIT` pessimistic locking with `SeatSegmentLock` rows to track and maximize availability across specific route segments, calculating overlaps dynamically.
-- **API Gateway Circuit Breaker & Rate Limiting:** Engineered an Axios-based API Gateway Proxy with a 3-state Circuit Breaker to prevent cascading failures. Defends against traffic spikes using a Sliding Window rate limiter backed by Redis Sorted Sets (ZSET).
-- **Two-Token Authentication:** Secures user sessions using an Access + Refresh Token rotation strategy with `httpOnly` cookies and device fingerprinting. Tokens rotate silently on expiry, immediately neutralizing stolen credentials.
+- **Domain-Oriented Services:** Separate services for users, administration, search, inventory, bookings, payments, and notifications behind an API Gateway.
+- **Saga-Based Booking Workflow:** Coordinates seat holding, payment-order creation, seat confirmation, and reverse-order compensation when a later step fails.
+- **Idempotent Booking Requests:** Uses idempotency records to avoid creating duplicate bookings when the same request is retried.
+- **Versioned Booking Transitions:** Uses Compare-And-Swap-style updates with version fields to detect stale booking-state changes.
+- **Seat Coordination:** Combines temporary Redis locks with PostgreSQL row-level locking for inventory updates.
+- **Segment-Aware Availability:** Tracks overlapping journey segments so the same physical seat can be reused for non-overlapping route portions.
+- **Event-Driven Processing:** Uses Kafka events for payment outcomes, booking updates, inventory changes, schedule events, and notifications.
+- **API Gateway Controls:** Includes JWT request authentication, downstream request timeouts, an in-process circuit breaker, and Redis Sorted Set-based sliding-window rate limiting.
+- **Payment and Notifications:** Integrates Razorpay for payment workflows and SendGrid for booking-related email notifications.
+- **Frontend Application:** Provides train search, seat selection, booking, payment, booking history, authentication, and administrative interfaces.
+
+---
+
+## 🧩 Services
+
+| Component | Responsibility | Default Port |
+|---|---|---:|
+| API Gateway | Routing, authentication, rate limiting, circuit breaking | 3000 |
+| User Service | Registration, login, and user management | 4001 |
+| Admin Service | Trains, routes, stations, and schedules | 4002 |
+| Search Service | Elasticsearch-backed train search | 4003 |
+| Inventory Service | Seat availability, holds, confirmations, and segment tracking | 4004 |
+| Booking Service | Booking lifecycle and Saga orchestration | 4005 |
+| Payment Service | Razorpay orders, verification, webhooks, and refunds | 4006 |
+| Notification Service | Booking-related email notifications | 4007 |
+| Frontend | React web application | 5173 |
 
 ---
 
 ## 🏗️ System Architecture
-
-The application utilizes a distributed microservices architecture, seamlessly integrating a robust API Gateway with isolated backend domain services communicating synchronously via HTTP and asynchronously via Apache Kafka. Each service owns its own database for true decoupled scalability.
-
-### High-Level Architecture (Full System Topology)
 
 ```mermaid
 graph TD
@@ -50,89 +71,82 @@ graph TD
     classDef database fill:#ffebee,stroke:#b71c1c,stroke-width:2px,color:#000;
     classDef external fill:#eceff1,stroke:#455a64,stroke-width:2px,color:#000;
 
-    User((Client App)):::frontend
+    User((User)):::frontend
     Frontend[React SPA + Zustand]:::frontend
-
-    Gateway[API Gateway<br/><i>Circuit Breaker, Rate Limiter, Auth</i>]:::gateway
+    Gateway[API Gateway<br/><i>Routing, Auth, Rate Limiting, Circuit Breaker</i>]:::gateway
 
     User --> Frontend
     Frontend <--> Gateway
 
-    subgraph Domain_Services ["Microservices Grid (Node.js/Express)"]
-        UserService[User Service<br/><i>Port 4001</i>]:::service
-        AdminService[Admin Service<br/><i>Port 4002</i>]:::service
-        SearchService[Search Service<br/><i>Port 4003</i>]:::service
-        InventoryService[Inventory Service<br/><i>Port 4004</i>]:::service
-        BookingService[Booking Service<br/><i>Port 4005</i>]:::service
-        PaymentService[Payment Service<br/><i>Port 4006</i>]:::service
-        NotificationService[Notification Service<br/><i>Port 4007</i>]:::service
+    subgraph Services ["Node.js / Express Services"]
+        UserService[User Service]:::service
+        AdminService[Admin Service]:::service
+        SearchService[Search Service]:::service
+        InventoryService[Inventory Service]:::service
+        BookingService[Booking Service]:::service
+        PaymentService[Payment Service]:::service
+        NotificationService[Notification Service]:::service
     end
 
     Gateway --> UserService
     Gateway --> AdminService
     Gateway --> SearchService
     Gateway --> BookingService
+    Gateway --> InventoryService
+    Gateway --> PaymentService
 
-    %% Synchronous Inter-Service calls (Saga)
-    BookingService -->|1. Hold Seats - HTTP| InventoryService
-    BookingService -->|2. Create Order - HTTP| PaymentService
-    BookingService -->|3. Confirm Seats - HTTP| InventoryService
+    BookingService -->|Hold / Confirm / Release Seats| InventoryService
+    BookingService -->|Create Order / Verify / Refund| PaymentService
 
-    subgraph Data_Layer ["Data Persistence & Search"]
-        DB_User[(User DB)]:::database
-        DB_Admin[(Admin DB)]:::database
-        DB_Booking[(Booking DB)]:::database
-        DB_Inventory[(Inventory DB)]:::database
-        DB_Payment[(Payment DB)]:::database
-        ES[(Elasticsearch)]:::database
-        Redis[(Redis Cache & Locks)]:::database
-    end
-
-    UserService --- DB_User
-    AdminService --- DB_Admin
-    BookingService --- DB_Booking
-    InventoryService --- DB_Inventory
-    PaymentService --- DB_Payment
-    SearchService --- ES
-    Gateway -.- Redis
-    BookingService -.- Redis
-
-    subgraph Event_Bus ["Asynchronous Event Streaming"]
+    subgraph Data ["Data and Infrastructure"]
+        PostgreSQL[(PostgreSQL<br/><i>service-specific data models</i>)]:::database
+        Elasticsearch[(Elasticsearch)]:::database
+        Redis[(Redis)]:::database
         Kafka[Apache Kafka + Zookeeper]:::broker
     end
 
-    AdminService -.->|schedule.created| Kafka
-    PaymentService -.->|payment.success| Kafka
-    InventoryService -.->|seat.availability| Kafka
-    BookingService -.->|booking.confirmed| Kafka
+    UserService --- PostgreSQL
+    AdminService --- PostgreSQL
+    InventoryService --- PostgreSQL
+    BookingService --- PostgreSQL
+    PaymentService --- PostgreSQL
+    SearchService --- Elasticsearch
 
-    Kafka -.-> NotificationService
+    Gateway -.- Redis
+    BookingService -.- Redis
+
+    AdminService -.-> Kafka
+    PaymentService -.-> Kafka
+    InventoryService -.-> Kafka
+    BookingService -.-> Kafka
+
     Kafka -.-> SearchService
-    Kafka -.-> BookingService
     Kafka -.-> InventoryService
+    Kafka -.-> BookingService
+    Kafka -.-> NotificationService
 
-    subgraph External_Providers ["Third-Party APIs"]
-        Razorpay((Razorpay Gateway)):::external
-        SendGrid((SendGrid Mail)):::external
-    end
+    Razorpay((Razorpay)):::external
+    SendGrid((SendGrid)):::external
 
     PaymentService <--> Razorpay
-    NotificationService -->|Email Alerts| SendGrid
+    NotificationService --> SendGrid
 ```
+
+> The diagram shows logical service ownership. For local development, Docker Compose provisions one PostgreSQL server together with Redis, Kafka, Zookeeper, Elasticsearch, and their administration tools.
 
 ---
 
-## 🔄 Data Workflow
+## 🔄 Booking Workflow
 
-The lifecycle of a booking operation follows a strict, highly consistent path:
-
-1. **Client Request**: A booking request is issued via the API Gateway, carrying seat and passenger details along with a unique `idempotencyKey`.
-2. **Atomic Lock Acquisition**: The Booking Service orchestrator sorts the requested seats and attempts an all-or-nothing Redis lock using a custom Lua script.
-3. **Saga Execution**:
-   - **Step 1 (Inventory)**: Inventory service executes `FOR UPDATE NOWAIT` to deduct seat segments.
-   - **Step 2 (Payment)**: Payment service creates a Razorpay order.
-4. **Payment Processing**: The client completes the payment in the Razorpay UI. The Payment Service captures this via webhook (or client-side verification) and publishes a `payment.success` event to Kafka.
-5. **Confirmation & Notification**: The Booking Service consumes the event, updates the booking status to `CONFIRMED` via CAS, finalizes the seats in Inventory, and publishes `booking.confirmed` to trigger email alerts via the Notification Service.
+1. The client submits a booking request with the selected journey segment, seats, passengers, and an idempotency key.
+2. The Booking Service validates availability and attempts to acquire temporary Redis locks for the requested seats.
+3. The Booking Service creates a pending booking and starts the Saga workflow.
+4. The Inventory Service attempts to hold the seats using transactional inventory updates and row-level locking.
+5. The Payment Service creates a Razorpay order.
+6. A verified payment outcome is published through Kafka.
+7. The Booking Service advances the booking state and asks the Inventory Service to confirm the seats.
+8. A booking event is published for downstream notification processing.
+9. When a step fails, completed Saga steps are compensated where applicable, such as releasing held seats or initiating a refund.
 
 ---
 
@@ -140,83 +154,142 @@ The lifecycle of a booking operation follows a strict, highly consistent path:
 
 ### Frontend
 
-- **Framework:** React + Vite
-- **State Management:** Zustand
-- **Styling:** TailwindCSS
+- React
+- Vite
+- React Router
+- Zustand
+- Tailwind CSS
+- Axios
 
 ### Backend
 
-- **Runtime:** Node.js, Express
-- **Architecture:** Microservices, Saga Orchestrator, API Gateway
-- **Database:** PostgreSQL (per-service isolation), Prisma ORM
-- **Cache/Locking:** Redis (redis-stack)
-- **Message Broker:** Apache Kafka, Zookeeper
-- **Search Engine:** Elasticsearch 8, Kibana
+- Node.js
+- Express.js
+- PostgreSQL
+- Prisma ORM
+- Redis
+- Apache Kafka
+- Elasticsearch
+- JWT authentication
+- Razorpay
+- SendGrid
 
-### Infrastructure
+### Infrastructure and Tooling
 
-- **Containerization:** Docker & Docker Compose
-- **Payment Gateway:** Razorpay
-- **Notifications:** SendGrid
+- Docker
+- Docker Compose
+- Zookeeper
+- Kafka UI
+- pgAdmin
+- Kibana
 
 ---
 
-## 📌 Getting Started
+## 🚀 Getting Started
 
-### 1. Clone Repository
+### Prerequisites
+
+- Node.js and npm
+- Docker and Docker Compose
+- Razorpay test credentials for payment flows
+- SendGrid credentials for email notifications
+
+### 1. Clone the Repository
 
 ```bash
 git clone https://github.com/Rudy-123/IRCTC.git
 cd IRCTC
 ```
 
-### 2. Deployment (Docker Compose)
-
-The easiest way to spin up the entire cluster (PostgreSQL, Redis, Kafka, Zookeeper, Elasticsearch) is using Docker Compose:
+### 2. Start Infrastructure Dependencies
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
-### 3. Install Dependencies & Migrate
+This command starts the local infrastructure only:
 
-Install dependencies in the root and across all microservices. Then run Prisma migrations for each service:
+- PostgreSQL
+- pgAdmin
+- Redis Stack
+- Zookeeper
+- Kafka
+- Kafka UI
+- Elasticsearch
+- Kibana
+
+It does **not** start the Node.js services or the React frontend.
+
+### 3. Configure Environment Variables
+
+Create the required `.env` file inside each service directory. Configure database URLs, Redis, Kafka, service URLs, JWT secrets, Razorpay credentials, and SendGrid credentials as required by that service.
+
+### 4. Install Dependencies
+
+Run the following command inside the frontend, API Gateway, and each service directory:
 
 ```bash
-# Example for User Service
-cd User-Service
 npm install
+```
+
+### 5. Generate Prisma Clients and Apply Migrations
+
+For every service containing a Prisma schema:
+
+```bash
+npx prisma generate
 npx prisma migrate dev
 ```
 
-### 4. Start Services
+Ensure that the required logical databases exist in the local PostgreSQL server before running migrations.
 
-Start each microservice in its respective directory:
+### 6. Start the Services
+
+Start every service in a separate terminal from its own directory:
 
 ```bash
-cd api-gateway && npm run dev
+npm run dev
 ```
 
-### 5. Access the Application
+Then start the frontend:
 
-- **Frontend Dashboard:** `http://localhost:5173`
+```bash
+cd frontend
+npm run dev
+```
+
+### 7. Local Endpoints
+
+- **Frontend:** `http://localhost:5173`
 - **API Gateway:** `http://localhost:3000`
+- **Kafka UI:** `http://localhost:8080`
+- **pgAdmin:** `http://localhost:8081`
+- **Redis Insight:** `http://localhost:8001`
+- **Kibana:** `http://localhost:5601`
+
+---
+
+## 📌 Project Scope
+
+This repository is intended to demonstrate system-design and backend-engineering concepts in a portfolio environment.
+
+It should not be interpreted as:
+
+- an official IRCTC application;
+- a production deployment;
+- proof of massive concurrent-booking capacity;
+- proof of high availability or horizontal scalability;
+- evidence of sub-second booking confirmation; or
+- a benchmarked replacement for a real railway reservation platform.
+
+Performance or scalability numbers should only be added after publishing reproducible benchmark scripts, hardware details, workloads, and measured results.
 
 ---
 
 ## 🤝 Contributing
 
-Contributions are welcome.
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/new-feature`)
-3. Add tests and necessary documentation
-4. Commit your changes (`git commit -m 'Add new feature'`)
-5. Submit a pull request
-
----
-
-## 📄 License
-
-This project is licensed under the **MIT License**.
-See `LICENSE` file for more details.
+1. Fork the repository.
+2. Create a feature branch.
+3. Add or update tests and documentation.
+4. Commit the changes.
+5. Open a pull request.
