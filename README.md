@@ -62,28 +62,90 @@ This repository demonstrates the implementation of these patterns in a local dev
 
 ## 🏗️ System Architecture
 
-```mermaid
-graph TD
-    classDef frontend fill:#e3f2fd,stroke:#0d47a1,stroke-width:2px,color:#000;
-    classDef gateway fill:#fff8e1,stroke:#e65100,stroke-width:2px,color:#000;
-    classDef service fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px,color:#000;
-    classDef broker fill:#f3e5f5,stroke:#4a148c,stroke-width:2px,color:#000;
-    classDef database fill:#ffebee,stroke:#b71c1c,stroke-width:2px,color:#000;
-    classDef external fill:#eceff1,stroke:#455a64,stroke-width:2px,color:#000;
+To keep the architecture readable, the system is shown in two views:
 
-    User((User)):::frontend
-    Frontend[React SPA + Zustand]:::frontend
-    Gateway[API Gateway<br/><i>Routing, Auth, Rate Limiting, Circuit Breaker</i>]:::gateway
+1. **User-facing request and booking flow**
+2. **Service, data, and event topology**
+
+### 1. User-Facing Booking Flow
+
+```mermaid
+%%{init: {
+  "flowchart": {
+    "curve": "linear",
+    "nodeSpacing": 45,
+    "rankSpacing": 60
+  }
+}}%%
+
+flowchart LR
+    classDef client fill:#E3F2FD,stroke:#1565C0,stroke-width:2px,color:#000;
+    classDef gateway fill:#FFF3E0,stroke:#E65100,stroke-width:2px,color:#000;
+    classDef service fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px,color:#000;
+    classDef external fill:#ECEFF1,stroke:#455A64,stroke-width:2px,color:#000;
+    classDef event fill:#F3E5F5,stroke:#6A1B9A,stroke-width:2px,color:#000;
+
+    User((User)):::client
+    Frontend[React Web Application<br/>Search • Seats • Booking • Payment]:::client
+    Gateway[API Gateway<br/>Authentication • Routing • Rate Limiting]:::gateway
+
+    Search[Search Service<br/>Find trains and schedules]:::service
+    Booking[Booking Service<br/>Create and manage booking]:::service
+    Inventory[Inventory Service<br/>Hold, confirm, or release seats]:::service
+    Payment[Payment Service<br/>Create and verify payment]:::service
+    Razorpay((Razorpay)):::external
+
+    Kafka[Kafka Events]:::event
+    Notification[Notification Service]:::service
+    SendGrid((SendGrid)):::external
 
     User --> Frontend
-    Frontend <--> Gateway
+    Frontend --> Gateway
 
-    subgraph Services ["Node.js / Express Services"]
+    Gateway -->|Search request| Search
+    Gateway -->|Booking request| Booking
+
+    Booking -->|1. Hold seats| Inventory
+    Booking -->|2. Create payment order| Payment
+    Payment <--> Razorpay
+
+    Payment -.->|3. Payment result| Kafka
+    Kafka -.->|4. Update booking| Booking
+    Booking -->|5. Confirm or release seats| Inventory
+
+    Booking -.->|6. Booking event| Kafka
+    Kafka -.-> Notification
+    Notification --> SendGrid
+```
+
+### 2. Service, Data, and Event Topology
+
+```mermaid
+%%{init: {
+  "flowchart": {
+    "curve": "linear",
+    "nodeSpacing": 35,
+    "rankSpacing": 55
+  }
+}}%%
+
+flowchart TB
+    classDef gateway fill:#FFF3E0,stroke:#E65100,stroke-width:2px,color:#000;
+    classDef service fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px,color:#000;
+    classDef database fill:#FFEBEE,stroke:#C62828,stroke-width:2px,color:#000;
+    classDef cache fill:#FFFDE7,stroke:#F9A825,stroke-width:2px,color:#000;
+    classDef broker fill:#F3E5F5,stroke:#6A1B9A,stroke-width:2px,color:#000;
+
+    Gateway[API Gateway]:::gateway
+
+    subgraph DomainServices["Node.js / Express Domain Services"]
+        direction LR
+
         UserService[User Service]:::service
         AdminService[Admin Service]:::service
         SearchService[Search Service]:::service
-        InventoryService[Inventory Service]:::service
         BookingService[Booking Service]:::service
+        InventoryService[Inventory Service]:::service
         PaymentService[Payment Service]:::service
         NotificationService[Notification Service]:::service
     end
@@ -95,44 +157,49 @@ graph TD
     Gateway --> InventoryService
     Gateway --> PaymentService
 
-    BookingService -->|Hold / Confirm / Release Seats| InventoryService
-    BookingService -->|Create Order / Verify / Refund| PaymentService
+    BookingService -->|Seat operations| InventoryService
+    BookingService -->|Payment operations| PaymentService
 
-    subgraph Data ["Data and Infrastructure"]
-        PostgreSQL[(PostgreSQL<br/><i>service-specific data models</i>)]:::database
-        Elasticsearch[(Elasticsearch)]:::database
-        Redis[(Redis)]:::database
+    subgraph ServiceData["Service-Owned Data Models"]
+        direction LR
+
+        UserDB[(User DB)]:::database
+        AdminDB[(Admin DB)]:::database
+        BookingDB[(Booking DB)]:::database
+        InventoryDB[(Inventory DB)]:::database
+        PaymentDB[(Payment DB)]:::database
+        SearchIndex[(Elasticsearch Index)]:::database
+    end
+
+    UserService --- UserDB
+    AdminService --- AdminDB
+    BookingService --- BookingDB
+    InventoryService --- InventoryDB
+    PaymentService --- PaymentDB
+    SearchService --- SearchIndex
+
+    subgraph SharedInfrastructure["Shared Local Infrastructure"]
+        direction LR
+
+        Redis[(Redis<br/>Cache • Locks • Rate Limits)]:::cache
         Kafka[Apache Kafka + Zookeeper]:::broker
     end
 
-    UserService --- PostgreSQL
-    AdminService --- PostgreSQL
-    InventoryService --- PostgreSQL
-    BookingService --- PostgreSQL
-    PaymentService --- PostgreSQL
-    SearchService --- Elasticsearch
+    Gateway -.-> Redis
+    BookingService -.-> Redis
 
-    Gateway -.- Redis
-    BookingService -.- Redis
-
-    AdminService -.-> Kafka
-    PaymentService -.-> Kafka
-    InventoryService -.-> Kafka
-    BookingService -.-> Kafka
+    AdminService -.->|Schedule events| Kafka
+    PaymentService -.->|Payment events| Kafka
+    InventoryService -.->|Availability events| Kafka
+    BookingService -.->|Booking events| Kafka
 
     Kafka -.-> SearchService
-    Kafka -.-> InventoryService
     Kafka -.-> BookingService
+    Kafka -.-> InventoryService
     Kafka -.-> NotificationService
-
-    Razorpay((Razorpay)):::external
-    SendGrid((SendGrid)):::external
-
-    PaymentService <--> Razorpay
-    NotificationService --> SendGrid
 ```
 
-> The diagram shows logical service ownership. For local development, Docker Compose provisions one PostgreSQL server together with Redis, Kafka, Zookeeper, Elasticsearch, and their administration tools.
+> The diagrams show logical service ownership and communication paths. In local development, Docker Compose provisions one PostgreSQL server containing service-specific logical databases, together with Redis, Kafka, Zookeeper, Elasticsearch, and administration tools.
 
 ---
 
